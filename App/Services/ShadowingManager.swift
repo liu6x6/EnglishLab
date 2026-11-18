@@ -19,7 +19,11 @@ final class ShadowingManager {
     private(set) var media: MediaItem?
     private(set) var result: ShadowingResult?
     private(set) var lastRecordingURL: URL?
+    /// 单词练习模式（红词重练）：非 nil 时录音评估针对该词
+    private(set) var wordPractice: String?
     var errorMessage: String?
+
+    @ObservationIgnored private var sentenceResult: ShadowingResult?
 
     let recorder = AudioRecorderService()
 
@@ -73,6 +77,8 @@ final class ShadowingManager {
         result = nil
         errorMessage = nil
         lastRecordingURL = nil
+        wordPractice = nil
+        sentenceResult = nil
     }
 
     // MARK: - Original playback
@@ -143,9 +149,10 @@ final class ShadowingManager {
             do {
                 let text = try await self.speech.recognize(fileURL: url)
                 guard let line = self.line, self.phase == .processing else { return }
-                let result = TextAligner.assess(targetText: line.text, recognizedText: text)
+                let target = self.wordPractice ?? line.text
+                let result = TextAligner.assess(targetText: target, recognizedText: text)
                 self.result = result
-                self.persist(result: result, recordingURL: url)
+                self.persist(result: result, targetText: target, recordingURL: url)
                 self.phase = .result
             } catch {
                 guard self.phase == .processing else { return }
@@ -154,11 +161,34 @@ final class ShadowingManager {
         }
     }
 
-    /// 再练一次（保留历史会话记录）
+    /// 再练一次（保留历史会话记录；单词模式下继续练同一个词）
     func retry() {
         result = nil
         errorMessage = nil
         phase = .readyToRecord
+    }
+
+    /// 红词单独重练：暂存整句结果，进入单词练习
+    func practiceWord(_ word: String) {
+        guard !word.isEmpty else { return }
+        if wordPractice == nil {
+            sentenceResult = result
+        }
+        wordPractice = word
+        result = nil
+        errorMessage = nil
+        playTask?.cancel()
+        playerManager?.pause()
+        phase = .readyToRecord
+    }
+
+    /// 返回整句结果
+    func exitWordPractice() {
+        wordPractice = nil
+        result = sentenceResult
+        sentenceResult = nil
+        errorMessage = nil
+        phase = result != nil ? .result : .readyToRecord
     }
 
     // MARK: - Playback of my recording
@@ -179,13 +209,13 @@ final class ShadowingManager {
         phase = .failed
     }
 
-    private func persist(result: ShadowingResult, recordingURL: URL) {
+    private func persist(result: ShadowingResult, targetText: String, recordingURL: URL) {
         guard let context, let line, let media else { return }
         let session = ShadowingSession(
             mediaItemID: media.id,
             subtitleLineID: line.id,
             mediaTitle: media.title,
-            targetText: line.text,
+            targetText: targetText,
             recognizedText: result.recognizedText,
             audioFileName: recordingURL.lastPathComponent,
             overallScore: result.overallScore,

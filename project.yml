@@ -63,6 +63,8 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "用于录制你的跟读语音，与原音对比并评分。录音仅保存在本机。"
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: "用于识别你的跟读内容并给出逐词反馈，优先在设备本地完成。"
+        INFOPLIST_KEY_UIBackgroundModes: "audio"
+        INFOPLIST_FILE: App/Info-iOS.plist
         TARGETED_DEVICE_FAMILY: "1,2"
         CODE_SIGN_ENTITLEMENTS: App/EnglishLab-iOS.entitlements
         CODE_SIGN_STYLE: Automatic

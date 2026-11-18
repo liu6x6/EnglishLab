@@ -26,6 +26,7 @@ final class PlayerManager {
     @ObservationIgnored private var lastPersist: TimeInterval = 0
     @ObservationIgnored private var lastTick: Double?
     @ObservationIgnored private var pendingListening: Double = 0
+    @ObservationIgnored private var lastNowPlayingSecond: Int = -1
 
     init() {
         player.actionAtItemEnd = .pause
@@ -71,6 +72,11 @@ final class PlayerManager {
         }
         let asset = AVURLAsset(url: MediaStore.shared.url(for: item.fileName))
         player.replaceCurrentItem(with: AVPlayerItem(asset: asset))
+        #if os(iOS)
+        NowPlayingService.shared.configurePlaybackSession()
+        NowPlayingService.shared.configureCommands(manager: self)
+        updateNowPlaying()
+        #endif
         // 应用设置中的默认倍速
         let defaultRate = UserDefaults.standard.double(forKey: "defaultRate")
         if defaultRate > 0 { rate = Float(defaultRate) }
@@ -97,13 +103,18 @@ final class PlayerManager {
         if isPlaying {
             pause()
         } else {
-            // 播放到结尾后再按播放：从头开始
-            if duration > 0, currentTime >= duration - 0.2 {
-                seek(to: 0)
-            }
-            player.playImmediately(atRate: rate)
-            isPlaying = true
+            play()
         }
+    }
+
+    func play() {
+        // 播放到结尾后再按播放：从头开始
+        if duration > 0, currentTime >= duration - 0.2 {
+            seek(to: 0)
+        }
+        player.playImmediately(atRate: rate)
+        isPlaying = true
+        updateNowPlaying()
     }
 
     func pause() {
@@ -111,6 +122,7 @@ final class PlayerManager {
         isPlaying = false
         persistProgress(force: true)
         flushListening()
+        updateNowPlaying()
     }
 
     func seek(to time: Double, autoplay: Bool = false) {
@@ -125,6 +137,7 @@ final class PlayerManager {
             player.playImmediately(atRate: rate)
             isPlaying = true
         }
+        updateNowPlaying()
     }
 
     func skip(_ delta: Double) {
@@ -160,6 +173,13 @@ final class PlayerManager {
         isPlaying = player.timeControlStatus == .playing
         persistProgress(force: false)
         accumulateListening(t)
+        #if os(iOS)
+        // 锁屏进度每秒刷新一次
+        if Int(t) != lastNowPlayingSecond {
+            lastNowPlayingSecond = Int(t)
+            updateNowPlaying()
+        }
+        #endif
     }
 
     /// 统计真实播放时长（seek 跳变不计），每满 5 秒写入 DayStat
@@ -177,6 +197,23 @@ final class PlayerManager {
             StatsTracker.shared.addListening(pendingListening)
             pendingListening = 0
         }
+    }
+
+    /// 应用切后台/退出前的检查点：落库进度与统计
+    func checkpoint() {
+        persistProgress(force: true)
+        flushListening()
+    }
+
+    private func updateNowPlaying() {
+        #if os(iOS)
+        NowPlayingService.shared.updateInfo(
+            title: currentItem?.title,
+            duration: duration,
+            elapsed: currentTime,
+            rate: isPlaying ? rate : 0
+        )
+        #endif
     }
 
     private func persistProgress(force: Bool) {

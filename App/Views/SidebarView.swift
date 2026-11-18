@@ -1,16 +1,23 @@
 import SwiftUI
 import SwiftData
 
-/// 左侧播放列表：素材列表、导入（NSOpenPanel）、进度、继续播放
+/// 左侧播放列表：素材/自建分组、搜索、导入、进度、继续播放
 struct SidebarView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \MediaItem.addedAt, order: .reverse) private var items: [MediaItem]
+    @Query(sort: \Playlist.sortOrder) private var playlists: [Playlist]
     @Binding var selection: MediaItem?
     var onAISubtitle: (MediaItem) -> Void = { _ in }
 
+    @State private var searchText = ""
     @State private var renameTarget: MediaItem?
     @State private var renameText = ""
     @State private var errorMessage: String?
+    @State private var newPlaylistPresented = false
+    @State private var newPlaylistName = ""
+    @State private var pendingAddItem: MediaItem?
+    @State private var playlistRenameTarget: Playlist?
+    @State private var playlistRenameText = ""
     #if os(iOS)
     @State private var showMediaPicker = false
     @State private var showSubtitlePicker = false
@@ -19,23 +26,60 @@ struct SidebarView: View {
 
     private var videos: [MediaItem] { items.filter { $0.type == .video } }
     private var audios: [MediaItem] { items.filter { $0.type == .audio } }
+    private var searchResults: [MediaItem] {
+        items.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
-        Group {
-            if items.isEmpty {
-                emptyState
-            } else {
-                list
+        VStack(spacing: 0) {
+            // 素材搜索（FR-01.6）
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("搜索素材…", text: $searchText)
+                    .textFieldStyle(.plain)
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.1)))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+
+            Group {
+                if items.isEmpty {
+                    emptyState
+                } else {
+                    list
+                }
             }
         }
         .toolbar {
             ToolbarItem {
-                Button {
-                    importMedia()
+                Menu {
+                    Button {
+                        importMedia()
+                    } label: {
+                        Label("导入素材", systemImage: "plus")
+                    }
+                    Button {
+                        newPlaylistName = ""
+                        pendingAddItem = nil
+                        newPlaylistPresented = true
+                    } label: {
+                        Label("新建播放列表", systemImage: "folder.badge.plus")
+                    }
                 } label: {
-                    Label("导入素材", systemImage: "plus")
+                    Label("导入/新建", systemImage: "plus")
                 }
-                .help("导入视频/音频（可同时选择同名字幕文件）")
+                .help("导入素材或新建播放列表")
             }
         }
         .alert("重命名", isPresented: Binding(
@@ -48,6 +92,25 @@ struct SidebarView: View {
                 renameTarget = nil
             }
             Button("取消", role: .cancel) { renameTarget = nil }
+        }
+        .alert("新建播放列表", isPresented: $newPlaylistPresented) {
+            TextField("名称（如：TED / 美剧 / 考试听力）", text: $newPlaylistName)
+            Button("创建") { createPlaylist() }
+            Button("取消", role: .cancel) {
+                pendingAddItem = nil
+                newPlaylistPresented = false
+            }
+        }
+        .alert("重命名播放列表", isPresented: Binding(
+            get: { playlistRenameTarget != nil },
+            set: { if !$0 { playlistRenameTarget = nil } }
+        )) {
+            TextField("名称", text: $playlistRenameText)
+            Button("确定") {
+                playlistRenameTarget?.name = playlistRenameText
+                playlistRenameTarget = nil
+            }
+            Button("取消", role: .cancel) { playlistRenameTarget = nil }
         }
         .alert("导入提示", isPresented: Binding(
             get: { errorMessage != nil },
@@ -102,21 +165,46 @@ struct SidebarView: View {
 
     private var list: some View {
         List(selection: $selection) {
-            if !videos.isEmpty {
-                Section("视频") {
-                    ForEach(videos) { item in row(item) }
+            if !searchText.isEmpty {
+                Section("搜索结果（\(searchResults.count)）") {
+                    ForEach(searchResults) { item in row(item) }
                 }
-            }
-            if !audios.isEmpty {
-                Section("音频") {
-                    ForEach(audios) { item in row(item) }
+            } else {
+                if !videos.isEmpty {
+                    Section("视频") {
+                        ForEach(videos) { item in row(item) }
+                    }
+                }
+                if !audios.isEmpty {
+                    Section("音频") {
+                        ForEach(audios) { item in row(item) }
+                    }
+                }
+                ForEach(playlists) { playlist in
+                    Section {
+                        ForEach(playlist.items.sorted { $0.addedAt > $1.addedAt }) { item in
+                            row(item, inPlaylist: playlist)
+                        }
+                    } header: {
+                        Text("\(playlist.name)（\(playlist.items.count)）")
+                            .contextMenu {
+                                Button("重命名…") {
+                                    playlistRenameText = playlist.name
+                                    playlistRenameTarget = playlist
+                                }
+                                Button("删除列表", role: .destructive) {
+                                    context.delete(playlist)
+                                    try? context.save()
+                                }
+                            }
+                    }
                 }
             }
         }
         .listStyle(.sidebar)
     }
 
-    private func row(_ item: MediaItem) -> some View {
+    private func row(_ item: MediaItem, inPlaylist: Playlist? = nil) -> some View {
         HStack(spacing: 8) {
             Image(systemName: item.type == .video ? "film" : "waveform")
                 .foregroundStyle(.secondary)
@@ -148,12 +236,50 @@ struct SidebarView: View {
                 renameText = item.title
                 renameTarget = item
             }
+            Menu("加入播放列表") {
+                ForEach(playlists) { playlist in
+                    Button(playlist.name) {
+                        if !playlist.items.contains(where: { $0.id == item.id }) {
+                            playlist.items.append(item)
+                            try? context.save()
+                        }
+                    }
+                    .disabled(playlist.items.contains { $0.id == item.id })
+                }
+                Divider()
+                Button("新建播放列表…") {
+                    pendingAddItem = item
+                    newPlaylistName = ""
+                    newPlaylistPresented = true
+                }
+            }
+            if let playlist = inPlaylist {
+                Button("从「\(playlist.name)」移出") {
+                    playlist.items.removeAll { $0.id == item.id }
+                    try? context.save()
+                }
+            }
             Divider()
             Button("删除", role: .destructive) { delete(item) }
         }
     }
 
-    // MARK: - Actions（NSOpenPanel，macOS 原生可靠）
+    // MARK: - Playlist actions
+
+    private func createPlaylist() {
+        let name = newPlaylistName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        let playlist = Playlist(name: name, sortOrder: playlists.count)
+        context.insert(playlist)
+        if let item = pendingAddItem {
+            playlist.items.append(item)
+        }
+        try? context.save()
+        pendingAddItem = nil
+        newPlaylistPresented = false
+    }
+
+    // MARK: - Import actions
 
     private func importMedia() {
         #if os(macOS)

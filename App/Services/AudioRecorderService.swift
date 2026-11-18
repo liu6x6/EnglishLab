@@ -72,7 +72,10 @@ final class AudioRecorderService: NSObject {
         recorder?.stop()
         stopMeter()
         #if os(iOS)
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        // 录音结束恢复播放类会话（保证退后台继续播放）
+        let session = AVAudioSession.sharedInstance()
+        try? session.setCategory(.playback, mode: .spokenAudio)
+        try? session.setActive(false, options: .notifyOthersOnDeactivation)
         #endif
         isRecording = false
         level = 0

@@ -8,7 +8,10 @@ let package = Package(
         .library(name: "VocabularyKit", targets: ["VocabularyKit"])
     ],
     targets: [
-        .target(name: "VocabularyKit"),
+        .target(
+            name: "VocabularyKit",
+            resources: [.copy("Resources/ecdict.sqlite")]
+        ),
         .testTarget(name: "VocabularyKitTests", dependencies: ["VocabularyKit"])
     ]
 )

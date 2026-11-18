@@ -10,7 +10,9 @@ struct WordDetailPanel: View {
 
     @Environment(\.modelContext) private var context
     @Query private var records: [WordRecord]
+    @Query(sort: \LookupHistory.lastLookedUpAt, order: .reverse) private var history: [LookupHistory]
     @State private var speech = SpeechService()
+    @State private var searchText = ""
 
     private var currentRecord: WordRecord? {
         guard let word = vocabulary.entry?.word else { return nil }
@@ -18,38 +20,98 @@ struct WordDetailPanel: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if vocabulary.isLoading {
-                    HStack {
-                        ProgressView().controlSize(.small)
-                        Text("查询「\(vocabulary.selectedWord ?? "")」…")
-                            .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            // 单词/词组搜索框
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("查询单词或词组…", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .onSubmit {
+                        let q = searchText.trimmingCharacters(in: .whitespaces)
+                        if !q.isEmpty { vocabulary.lookup(q) }
                     }
-                } else if let entry = vocabulary.entry {
-                    entryView(entry)
-                } else if let error = vocabulary.errorMessage {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Label("查询失败", systemImage: "exclamationmark.triangle")
-                            .font(.headline)
-                        Text(error)
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                        if let word = vocabulary.selectedWord {
-                            Button("重试") { vocabulary.lookup(word) }
-                        }
-                    }
-                } else {
-                    ContentUnavailableView(
-                        "点词查义",
-                        systemImage: "character.cursor.ibeam",
-                        description: Text("点击文本区中的任意英文单词\n这里会显示释义、例句和发音")
-                    )
-                    .padding(.top, 40)
-                }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.1)))
+            .padding(10)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if vocabulary.isLoading {
+                        HStack {
+                            ProgressView().controlSize(.small)
+                            Text("查询「\(vocabulary.selectedWord ?? "")」…")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else if let entry = vocabulary.entry {
+                        entryView(entry)
+                    } else if let error = vocabulary.errorMessage {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("查询失败", systemImage: "exclamationmark.triangle")
+                                .font(.headline)
+                            Text(error)
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                            if let word = vocabulary.selectedWord {
+                                Button("重试") { vocabulary.lookup(word) }
+                            }
+                        }
+                    } else {
+                        historyView
+                    }
+                }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// 空状态：查词历史（可点击重查/清空）
+    @ViewBuilder
+    private var historyView: some View {
+        if history.isEmpty {
+            ContentUnavailableView(
+                "点词查义",
+                systemImage: "character.cursor.ibeam",
+                description: Text("点击文本区中的任意英文单词\n或在上方搜索框输入单词/词组")
+            )
+            .padding(.top, 30)
+        } else {
+            HStack {
+                Text("查词历史").font(.headline)
+                Spacer()
+                Button("清空", role: .destructive) {
+                    for h in history { context.delete(h) }
+                    try? context.save()
+                }
+                .font(.caption)
+                .buttonStyle(.borderless)
+            }
+            ForEach(history.prefix(20)) { item in
+                Button {
+                    vocabulary.lookup(item.word)
+                } label: {
+                    HStack {
+                        Text(item.word)
+                            .font(.callout)
+                        Spacer()
+                        if item.count > 1 {
+                            Text("×\(item.count)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Text(item.lastLookedUpAt.formatted(date: .omitted, time: .shortened))
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.gray.opacity(0.06)))
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -57,9 +119,19 @@ struct WordDetailPanel: View {
     private func entryView(_ entry: WordEntry) -> some View {
         // 单词 + 发音 + 生词本
         VStack(alignment: .leading, spacing: 6) {
-            Text(entry.word)
-                .font(.title.bold())
-                .textSelection(.enabled)
+            HStack(spacing: 8) {
+                Text(entry.word)
+                    .font(.title.bold())
+                    .textSelection(.enabled)
+                if entry.source.contains("ECDICT") {
+                    Text("中文/离线")
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(Color.green.opacity(0.15)))
+                        .foregroundStyle(.green)
+                }
+            }
             ForEach(Array(entry.phonetics.prefix(2).enumerated()), id: \.offset) { _, ph in
                 if let text = ph.text {
                     Text(text)

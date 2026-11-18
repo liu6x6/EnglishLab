@@ -10,9 +10,19 @@ struct TranscriptView: View {
     var onShadowTap: (SubtitleLine) -> Void = { _ in }
     var onAISubtitle: () -> Void = {}
     @State private var autoScroll = true
-    @State private var hideMode: TextHideMode = .normal
-    @State private var hiddenLines: Set<UUID> = []
+    @AppStorage("transcriptHideMode") private var hideModeRaw: String = "normal"
+    @Environment(\.modelContext) private var context
     @AppStorage("transcriptFontSize") private var fontSize: Double = 15
+
+    private var hideMode: TextHideMode { TextHideMode(rawValue: hideModeRaw) ?? .normal }
+    private var hideModeBinding: Binding<TextHideMode> {
+        Binding(get: { hideMode }, set: { hideModeRaw = $0.rawValue })
+    }
+
+    /// 单句隐藏（持久化在 MediaItem，按 index）
+    private var hiddenIndices: Set<Int> {
+        Set(item.hiddenLineIndicesCSV.split(separator: ",").compactMap { Int($0) })
+    }
 
     private var lines: [SubtitleLine] {
         item.lines.sorted { $0.index < $1.index }
@@ -42,17 +52,18 @@ struct TranscriptView: View {
                 }
                 Spacer()
                 Menu {
-                    Picker("文本显示", selection: $hideMode) {
+                    Picker("文本显示", selection: hideModeBinding) {
                         ForEach(TextHideMode.allCases) { mode in
                             Label(mode.displayName, systemImage: mode.systemImage).tag(mode)
                         }
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
-                    if !hiddenLines.isEmpty {
+                    if !hiddenIndices.isEmpty {
                         Divider()
-                        Button("显示所有已隐藏句子（\(hiddenLines.count)）") {
-                            hiddenLines.removeAll()
+                        Button("显示所有已隐藏句子（\(hiddenIndices.count)）") {
+                            item.hiddenLineIndicesCSV = ""
+                            try? context.save()
                         }
                     }
                 } label: {
@@ -110,7 +121,7 @@ struct TranscriptView: View {
                     Text("文本已完全隐藏，专注听音频")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("恢复显示") { hideMode = .normal }
+                    Button("恢复显示") { hideModeRaw = TextHideMode.normal.rawValue }
                         .buttonStyle(.bordered)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -127,7 +138,7 @@ struct TranscriptView: View {
                                     showTiming: hasTiming,
                                     selectedWord: selectedWord,
                                     hideMode: hideMode,
-                                    isHidden: hiddenLines.contains(line.id),
+                                    isHidden: hiddenIndices.contains(line.index),
                                     onTap: { manager.seekToLine(line) },
                                     onLoop: { manager.toggleLoop(line) },
                                     onWordTap: onWordTap,
@@ -149,31 +160,17 @@ struct TranscriptView: View {
                 }
             }
         }
-        .onChange(of: item.id) { _, _ in
-            hiddenLines.removeAll()
-        }
-        .background {
-            Button("") { cycleHideMode() }
-                .keyboardShortcut("h", modifiers: [])
-                .frame(width: 0, height: 0)
-                .opacity(0)
-                .allowsHitTesting(false)
-        }
-    }
-
-    private func cycleHideMode() {
-        let all = TextHideMode.allCases
-        if let idx = all.firstIndex(of: hideMode) {
-            hideMode = all[(idx + 1) % all.count]
-        }
     }
 
     private func toggleHidden(_ line: SubtitleLine) {
-        if hiddenLines.contains(line.id) {
-            hiddenLines.remove(line.id)
+        var indices = hiddenIndices
+        if indices.contains(line.index) {
+            indices.remove(line.index)
         } else {
-            hiddenLines.insert(line.id)
+            indices.insert(line.index)
         }
+        item.hiddenLineIndicesCSV = indices.sorted().map(String.init).joined(separator: ",")
+        try? context.save()
     }
 }
 

@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var transcription = TranscriptionManager()
     @State private var aiOverwriteTarget: MediaItem?
     @Environment(\.modelContext) private var context
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var wordRecords: [WordRecord]
     @AppStorage("appearance") private var appearance: String = "system"
 
@@ -47,6 +48,8 @@ struct ContentView: View {
             }
             .onAppear {
                 StatsTracker.shared.configure(context: context)
+                vocabulary.configure(context: context)
+                restoreLastSessionIfNeeded()
                 manager.load(selectedMedia)
                 autoImportForTestingIfNeeded()
             }
@@ -55,9 +58,21 @@ struct ContentView: View {
                 if let idx = args.firstIndex(of: "--selftest-transcribe"), idx + 1 < args.count {
                     await TranscriptionSelfTest.run(path: args[idx + 1])
                 }
+                if let idx = args.firstIndex(of: "--selftest-audio"), idx + 1 < args.count {
+                    await AudioSelfTest.run(urlString: args[idx + 1])
+                }
             }
             .onDisappear {
                 manager.pause()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                // 切后台/失焦时落库进度与统计（iOS 后台继续播放，不暂停）
+                if phase != .active {
+                    manager.checkpoint()
+                    #if os(macOS)
+                    if phase == .background { manager.pause() }
+                    #endif
+                }
             }
             .sheet(isPresented: $showWordbook) {
                 WordbookView()
@@ -94,9 +109,68 @@ struct ContentView: View {
                 Text("「\(aiOverwriteTarget?.title ?? "")」已有 \(aiOverwriteTarget?.lines.count ?? 0) 句字幕，AI 生成将替换它们。")
             }
             .preferredColorScheme(colorScheme)
-            .background {
-                PlayerShortcuts(manager: manager, showWordbook: $showWordbook)
+            // 快捷键：.onKeyPress 走原生焦点系统——输入框/列表聚焦时按键被其消费，不会误触发
+            .focusable()
+            .focusEffectDisabled()
+            .onKeyPress(keys: [.space, .leftArrow, .rightArrow, .upArrow, .downArrow]) { press in
+                switch press.key {
+                case .space: manager.playPause()
+                case .leftArrow: manager.skip(-10)
+                case .rightArrow: manager.skip(10)
+                case .upArrow: manager.volume = min(1, manager.volume + 0.1)
+                case .downArrow: manager.volume = max(0, manager.volume - 0.1)
+                default: return .ignored
+                }
+                return .handled
             }
+            .onKeyPress(characters: CharacterSet(charactersIn: "[]lLhH")) { press in
+                switch press.characters.lowercased() {
+                case "[": stepRate(-1)
+                case "]": stepRate(1)
+                case "l": toggleCurrentLineLoop()
+                case "h": cycleHideMode()
+                default: return .ignored
+                }
+                return .handled
+            }
+            .background {
+                // ⌘B 带修饰键，不与输入冲突，保留 keyboardShortcut
+                Button("") { showWordbook.toggle() }
+                    .keyboardShortcut("b", modifiers: .command)
+                    .frame(width: 0, height: 0)
+                    .opacity(0)
+                    .allowsHitTesting(false)
+            }
+    }
+
+    // MARK: - Shortcut actions
+
+    private let rateSteps: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
+
+    private func stepRate(_ direction: Int) {
+        let idx = rateSteps.firstIndex(of: manager.rate) ?? 2
+        let next = max(0, min(rateSteps.count - 1, idx + direction))
+        manager.rate = rateSteps[next]
+    }
+
+    private func toggleCurrentLineLoop() {
+        if manager.loopLine != nil {
+            manager.loopLine = nil
+            return
+        }
+        guard let item = manager.currentItem else { return }
+        let t = manager.currentTime
+        if let line = item.lines.first(where: { t >= $0.startTime && t < $0.endTime }) {
+            manager.toggleLoop(line)
+        }
+    }
+
+    private func cycleHideMode() {
+        let all = TextHideMode.allCases
+        let current = TextHideMode(rawValue: UserDefaults.standard.string(forKey: "transcriptHideMode") ?? "normal") ?? .normal
+        if let idx = all.firstIndex(of: current) {
+            UserDefaults.standard.set(all[(idx + 1) % all.count].rawValue, forKey: "transcriptHideMode")
+        }
     }
 
     // MARK: - Layouts
@@ -243,6 +317,22 @@ struct ContentView: View {
     }
 
     // MARK: - Actions
+
+    /// 启动恢复：自动选中上次学习的素材
+    private func restoreLastSessionIfNeeded() {
+        guard selectedMedia == nil else { return }
+        var descriptor = FetchDescriptor<MediaItem>(
+            predicate: #Predicate { $0.lastPlayedAt != nil },
+            sortBy: [SortDescriptor(\.lastPlayedAt, order: .reverse)]
+        )
+        descriptor.fetchLimit = 1
+        if let last = try? context.fetch(descriptor).first {
+            selectedMedia = last
+            #if DEBUG
+            print("[restore] 恢复上次素材：\(last.title)")
+            #endif
+        }
+    }
 
     /// AI 字幕：无字幕直接生成；已有字幕先确认替换
     private func requestAISubtitle(_ item: MediaItem) {

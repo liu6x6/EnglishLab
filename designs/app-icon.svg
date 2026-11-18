@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- 背景渐变：靛蓝 → 紫（与 App 强调色一致） -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366F1"/>
+      <stop offset="55%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#A855F7"/>
+    </linearGradient>
+    <!-- 顶部柔光 -->
+    <radialGradient id="glow" cx="30%" cy="12%" r="75%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="60%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <!-- 声波条渐变 -->
+    <linearGradient id="wave" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#818CF8"/>
+      <stop offset="100%" stop-color="#6D28D9"/>
+    </linearGradient>
+    <!-- 气泡投影 -->
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="14" stdDeviation="22" flood-color="#312E81" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- macOS 风格圆角方形（824×824 居中，四周留白） -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#glow)"/>
+
+  <!-- 对话气泡（语言学习） -->
+  <g filter="url(#shadow)">
+    <path d="M 342 292
+             H 682
+             A 78 78 0 0 1 760 370
+             V 560
+             A 78 78 0 0 1 682 638
+             H 430
+             L 330 726
+             Q 316 738 318 720
+             L 328 638
+             A 78 78 0 0 1 264 560
+             V 370
+             A 78 78 0 0 1 342 292 Z"
+          fill="#FFFFFF"/>
+  </g>
+
+  <!-- 声波（听力 + 跟读）：五根圆角竖条，中间高两边低 -->
+  <g fill="url(#wave)">
+    <rect x="346" y="415" width="44" height="100" rx="22"/>
+    <rect x="420" y="375" width="44" height="180" rx="22"/>
+    <rect x="494" y="335" width="44" height="260" rx="22"/>
+    <rect x="568" y="375" width="44" height="180" rx="22"/>
+    <rect x="642" y="415" width="44" height="100" rx="22"/>
+  </g>
+
+  <!-- AI 星芒（AI 字幕/智能评分） -->
+  <path d="M 758 218
+           C 764 252 770 258 804 264
+           C 770 270 764 276 758 310
+           C 752 276 746 270 712 264
+           C 746 258 752 252 758 218 Z"
+        fill="#FBBF24"/>
+  <circle cx="822" cy="330" r="12" fill="#FBBF24" opacity="0.85"/>
+</svg>

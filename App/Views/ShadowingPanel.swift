@@ -5,6 +5,7 @@ import ShadowingKit
 struct ShadowingPanel: View {
     @Bindable var shadowing: ShadowingManager
     let onClose: () -> Void
+    @State private var speech = SpeechService()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -59,8 +60,22 @@ struct ShadowingPanel: View {
 
     @ViewBuilder
     private var sentenceArea: some View {
-        if let result = shadowing.result, shadowing.phase == .result {
-            ScoredSentenceView(result: result, fontSize: 20)
+        if let word = shadowing.wordPractice {
+            VStack(spacing: 6) {
+                Text("单词练习")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let result = shadowing.result, shadowing.phase == .result {
+                    ScoredSentenceView(result: result, fontSize: 34)
+                } else {
+                    Text(word)
+                        .font(.system(size: 34, weight: .bold))
+                }
+            }
+        } else if let result = shadowing.result, shadowing.phase == .result {
+            ScoredSentenceView(result: result, fontSize: 20) { word in
+                shadowing.practiceWord(word.targetWord)
+            }
         } else if let line = shadowing.line {
             Text(line.text)
                 .font(.system(size: 20, weight: .medium))
@@ -92,16 +107,25 @@ struct ShadowingPanel: View {
 
         case .readyToRecord:
             VStack(spacing: 16) {
-                Text("模仿原句，大声读出来")
+                Text(shadowing.wordPractice == nil ? "模仿原句，大声读出来" : "听示范发音，然后读出这个单词")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 recordButton
-                Button {
-                    shadowing.playOriginal()
-                } label: {
-                    Label("再听一遍原音", systemImage: "speaker.wave.2")
+                if let word = shadowing.wordPractice {
+                    Button {
+                        speech.speak(word)
+                    } label: {
+                        Label("示范发音", systemImage: "speaker.wave.2")
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button {
+                        shadowing.playOriginal()
+                    } label: {
+                        Label("再听一遍原音", systemImage: "speaker.wave.2")
+                    }
+                    .buttonStyle(.bordered)
                 }
-                .buttonStyle(.bordered)
             }
 
         case .recording:
@@ -176,6 +200,59 @@ struct ShadowingPanel: View {
 
     private func resultArea(_ result: ShadowingResult) -> some View {
         VStack(spacing: 16) {
+            if shadowing.wordPractice != nil {
+                wordResultArea(result)
+            } else {
+                sentenceResultArea(result)
+            }
+        }
+    }
+
+    /// 单词练习结果
+    private func wordResultArea(_ result: ShadowingResult) -> some View {
+        VStack(spacing: 16) {
+            if result.overallScore >= 100 {
+                Label("读对了！", systemImage: "checkmark.seal.fill")
+                    .font(.title3.bold())
+                    .foregroundStyle(.green)
+            } else {
+                Label("识别为「\(result.recognizedText.isEmpty ? "无" : result.recognizedText)」，再试试", systemImage: "arrow.counterclockwise")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+            }
+            HStack(spacing: 12) {
+                Button {
+                    if let word = shadowing.wordPractice { speech.speak(word) }
+                } label: {
+                    Label("示范发音", systemImage: "speaker.wave.2")
+                }
+                Button {
+                    shadowing.playMyRecording()
+                } label: {
+                    Label("我的录音", systemImage: "person.wave.2")
+                }
+            }
+            .buttonStyle(.bordered)
+            HStack(spacing: 12) {
+                Button {
+                    shadowing.retry()
+                } label: {
+                    Label("再练一次", systemImage: "arrow.counterclockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                Button {
+                    shadowing.exitWordPractice()
+                } label: {
+                    Label("返回整句结果", systemImage: "arrow.uturn.backward")
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    /// 整句结果
+    private func sentenceResultArea(_ result: ShadowingResult) -> some View {
+        VStack(spacing: 16) {
             // 分数
             HStack(spacing: 8) {
                 Text(String(format: "%.0f", result.overallScore))
@@ -191,22 +268,31 @@ struct ShadowingPanel: View {
                 }
             }
 
-            // 待改进
+            // 待改进（红词可点击单独重练）
             let improve = result.wordsToImprove
             if !improve.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("待改进").font(.headline)
+                    Text("待改进（点击单词单独重练）").font(.headline)
                     ForEach(improve) { word in
-                        HStack(spacing: 6) {
-                            Text(word.targetWord)
-                                .font(.callout.weight(.semibold))
-                                .foregroundStyle(.red)
-                            Text(word.status == .deletion
-                                 ? "— 漏读"
-                                 : "— 识别为「\(word.recognizedWord ?? "")」")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Button {
+                            shadowing.practiceWord(word.targetWord)
+                        } label: {
+                            HStack(spacing: 6) {
+                                Text(word.targetWord)
+                                    .font(.callout.weight(.semibold))
+                                    .foregroundStyle(.red)
+                                    .underline()
+                                Text(word.status == .deletion
+                                     ? "— 漏读"
+                                     : "— 识别为「\(word.recognizedWord ?? "")」")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Image(systemName: "mic.badge.plus")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
+                        .buttonStyle(.plain)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -252,10 +338,11 @@ struct ShadowingPanel: View {
     }
 }
 
-/// 词级着色句子（绿=正确，红=读错，红+下划线=漏读，灰=多读）
+/// 词级着色句子（绿=正确，红=读错，红+下划线=漏读，灰=多读）；红词可点击重练
 struct ScoredSentenceView: View {
     let result: ShadowingResult
     let fontSize: CGFloat
+    var onWordTap: ((ScoredWord) -> Void)? = nil
 
     var body: some View {
         WordFlowLayout(hSpacing: 6, vSpacing: 6) {
@@ -273,16 +360,37 @@ struct ScoredSentenceView: View {
                 .font(.system(size: fontSize, weight: .medium))
                 .foregroundStyle(.green)
         case .substitution:
-            Text(word.targetWord)
-                .font(.system(size: fontSize, weight: .semibold))
-                .foregroundStyle(.red)
-                .help("识别为：\(word.recognizedWord ?? "")")
+            if let onWordTap {
+                Button { onWordTap(word) } label: {
+                    Text(word.targetWord)
+                        .font(.system(size: fontSize, weight: .semibold))
+                        .foregroundStyle(.red)
+                }
+                .buttonStyle(.plain)
+                .help("识别为：\(word.recognizedWord ?? "")，点击单独重练")
+            } else {
+                Text(word.targetWord)
+                    .font(.system(size: fontSize, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .help("识别为：\(word.recognizedWord ?? "")")
+            }
         case .deletion:
-            Text(word.targetWord)
-                .font(.system(size: fontSize, weight: .semibold))
-                .foregroundStyle(.red)
-                .underline()
-                .help("漏读")
+            if let onWordTap {
+                Button { onWordTap(word) } label: {
+                    Text(word.targetWord)
+                        .font(.system(size: fontSize, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .underline()
+                }
+                .buttonStyle(.plain)
+                .help("漏读，点击单独重练")
+            } else {
+                Text(word.targetWord)
+                    .font(.system(size: fontSize, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .underline()
+                    .help("漏读")
+            }
         case .insertion:
             Text(word.recognizedWord ?? "")
                 .font(.system(size: fontSize - 3))

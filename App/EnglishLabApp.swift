@@ -8,6 +8,10 @@ struct EnglishLabApp: App {
             MainActor.assumeIsolated { ReviewSelfTest.run() }
             exit(0)
         }
+        if CommandLine.arguments.contains("--selftest-dict") {
+            MainActor.assumeIsolated { DictSelfTest.run() }
+            exit(0)
+        }
         UserDefaults.standard.register(defaults: [
             "defaultRate": 1.0,
             "transcriptFontSize": 15.0,
@@ -19,7 +23,7 @@ struct EnglishLabApp: App {
         WindowGroup {
             ContentView()
         }
-        .modelContainer(for: [MediaItem.self, Playlist.self, SubtitleLine.self, WordRecord.self, ShadowingSession.self, DayStat.self])
+        .modelContainer(for: [MediaItem.self, Playlist.self, SubtitleLine.self, WordRecord.self, ShadowingSession.self, DayStat.self, LookupHistory.self])
         #if os(macOS)
         .defaultSize(width: 1280, height: 800)
         #endif

@@ -13,6 +13,7 @@ struct WordbookView: View {
     @State private var searchText = ""
     @State private var selection: WordRecord?
     @State private var speech = SpeechService()
+    @State private var showBatchAdd = false
     #if os(iOS)
     @State private var shareItems: [Any]?
     #endif
@@ -73,6 +74,9 @@ struct WordbookView: View {
             }
         }
         .sheetMinFrame(width: 760, height: 500)
+        .sheet(isPresented: $showBatchAdd) {
+            BatchAddView()
+        }
         #if os(iOS)
         .sheet(isPresented: Binding(
             get: { shareItems != nil },
@@ -110,14 +114,15 @@ struct WordbookView: View {
             Spacer()
 
             Menu {
+                Button("批量加词（粘贴文本）") { showBatchAdd = true }
+                Divider()
                 Button("导出 CSV") { exportCSV() }
                 Button("导出 Anki（TSV 文本）") { exportAnki() }
             } label: {
-                Label("导出", systemImage: "square.and.arrow.up")
+                Label("更多", systemImage: "ellipsis.circle")
             }
             .adaptiveMenuStyle()
             .fixedSize()
-            .disabled(records.isEmpty)
 
             Button("完成") { dismiss() }
                 .keyboardShortcut(.defaultAction)

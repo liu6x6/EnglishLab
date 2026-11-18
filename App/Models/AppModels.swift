@@ -18,6 +18,8 @@ final class MediaItem {
     var currentTime: Double
     var addedAt: Date
     var lastPlayedAt: Date?
+    /// 单句隐藏持久化：逗号分隔的字幕行 index（重解析字幕后 UUID 会变，index 稳定）
+    var hiddenLineIndicesCSV: String = ""
 
     @Relationship(deleteRule: .cascade, inverse: \SubtitleLine.mediaItem)
     var lines: [SubtitleLine]
@@ -92,6 +94,20 @@ final class SubtitleLine {
         self.startTime = startTime
         self.endTime = endTime
         self.text = text
+    }
+}
+
+/// 查词历史（与生词本独立）
+@Model
+final class LookupHistory {
+    @Attribute(.unique) var word: String
+    var lastLookedUpAt: Date
+    var count: Int
+
+    init(word: String, lastLookedUpAt: Date = Date(), count: Int = 1) {
+        self.word = word
+        self.lastLookedUpAt = lastLookedUpAt
+        self.count = count
     }
 }
 

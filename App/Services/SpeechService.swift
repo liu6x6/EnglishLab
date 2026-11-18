@@ -10,7 +10,14 @@ final class SpeechService {
 
     func pronounce(_ entry: WordEntry) {
         if let audio = entry.phonetics.compactMap(\.audioURL).first {
-            play(url: audio)
+            // 先查本地缓存，未命中下载后缓存；失败回退在线流播
+            Task {
+                if let local = await AudioCache.shared.localURL(for: audio) {
+                    play(url: local)
+                } else {
+                    play(url: audio)
+                }
+            }
         } else {
             speak(entry.word)
         }

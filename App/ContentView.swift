@@ -14,6 +14,8 @@ struct ContentView: View {
     @State private var showStats = false
     @State private var transcription = TranscriptionManager()
     @State private var aiOverwriteTarget: MediaItem?
+    @State private var isDropTargeted = false
+    @State private var dropErrorMessage: String?
     @Environment(\.modelContext) private var context
     @Environment(\.scenePhase) private var scenePhase
     @Query private var wordRecords: [WordRecord]
@@ -43,7 +45,10 @@ struct ContentView: View {
             .onChange(of: selectedMedia) { _, newValue in
                 manager.load(newValue)
                 #if os(iOS)
-                if isCompact, newValue != nil { selectedTab = 1 }
+                if isCompact, newValue != nil,
+                   !CommandLine.arguments.contains("--selftest-import-picker") {
+                    selectedTab = 1
+                }
                 #endif
             }
             .onAppear {
@@ -109,6 +114,42 @@ struct ContentView: View {
                 Text("「\(aiOverwriteTarget?.title ?? "")」已有 \(aiOverwriteTarget?.lines.count ?? 0) 句字幕，AI 生成将替换它们。")
             }
             .preferredColorScheme(colorScheme)
+            // 拖拽文件自动导入（Finder 拖入窗口任意位置）
+            .dropDestination(for: URL.self) { urls, _ in
+                let mediaURLs = urls.filter { $0.isFileURL }
+                guard !mediaURLs.isEmpty else { return false }
+                let result = MediaImporter.importFiles(mediaURLs, context: context)
+                if let first = result.imported.first {
+                    selectedMedia = first
+                }
+                dropErrorMessage = result.error
+                return !result.imported.isEmpty
+            } isTargeted: { targeted in
+                isDropTargeted = targeted
+            }
+            .overlay {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8]))
+                        .background(Color.accentColor.opacity(0.08))
+                        .overlay {
+                            Label("松开导入素材", systemImage: "square.and.arrow.down")
+                                .font(.title2.bold())
+                                .padding(16)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+                        }
+                        .allowsHitTesting(false)
+                        .padding(6)
+                }
+            }
+            .alert("导入提示", isPresented: Binding(
+                get: { dropErrorMessage != nil },
+                set: { if !$0 { dropErrorMessage = nil } }
+            )) {
+                Button("好", role: .cancel) { dropErrorMessage = nil }
+            } message: {
+                Text(dropErrorMessage ?? "")
+            }
             // 快捷键：.onKeyPress 走原生焦点系统——输入框/列表聚焦时按键被其消费，不会误触发
             .focusable()
             .focusEffectDisabled()

@@ -13,6 +13,8 @@ final class PlayerManager {
     var duration: Double = 0
     var isPlaying: Bool = false
     var loopLine: SubtitleLine?
+    /// 单句播放（一次性，播完自动暂停）
+    private(set) var playingLine: SubtitleLine?
 
     var rate: Float = 1.0 {
         didSet { if isPlaying { player.rate = rate } }
@@ -61,6 +63,7 @@ final class PlayerManager {
         persistProgress(force: true)
         flushListening()
         lastTick = nil
+        playingLine = nil
         loopLine = nil
         currentItem = item
         guard let item else {
@@ -126,6 +129,7 @@ final class PlayerManager {
     }
 
     func seek(to time: Double, autoplay: Bool = false) {
+        playingLine = nil
         let upper = duration > 0 ? duration : time
         let clamped = max(0, min(time, upper))
         player.seek(
@@ -144,14 +148,31 @@ final class PlayerManager {
         seek(to: currentTime + delta)
     }
 
-    /// 点击句子：跳转并播放；若正在循环别的句子则取消循环
+    /// 点击句子：跳转并连续播放；若正在循环别的句子则取消循环
     func seekToLine(_ line: SubtitleLine) {
         if loopLine?.id != line.id { loopLine = nil }
         seek(to: line.startTime, autoplay: true)
     }
 
+    /// 单句播放：跳到该句起点播放，播到句尾自动暂停（进度条同步联动）
+    func playLine(_ line: SubtitleLine) {
+        loopLine = nil
+        seek(to: line.startTime, autoplay: true)
+        playingLine = line
+    }
+
+    /// 取消单句播放（继续连续播放）
+    func cancelLinePlay() {
+        playingLine = nil
+        if !isPlaying {
+            player.playImmediately(atRate: rate)
+            isPlaying = true
+        }
+    }
+
     /// AB 单句循环开关
     func toggleLoop(_ line: SubtitleLine) {
+        playingLine = nil
         if loopLine?.id == line.id {
             loopLine = nil
         } else {
@@ -165,6 +186,15 @@ final class PlayerManager {
     private func handleTimeUpdate(_ time: CMTime) {
         let t = CMTimeGetSeconds(time)
         guard t.isFinite else { return }
+        // 单句播放：到句尾自动暂停
+        if let line = playingLine {
+            if t >= line.endTime - 0.05 {
+                playingLine = nil
+                currentTime = min(t, line.endTime)
+                pause()
+                return
+            }
+        }
         if let line = loopLine, t >= line.endTime || t < line.startTime - 0.3 {
             seek(to: line.startTime)
             return

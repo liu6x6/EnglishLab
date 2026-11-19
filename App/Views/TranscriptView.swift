@@ -140,6 +140,7 @@ struct TranscriptView: View {
                                     hideMode: hideMode,
                                     isHidden: hiddenIndices.contains(line.index),
                                     onTap: { manager.seekToLine(line) },
+                                    onPlayOnce: { manager.playLine(line) },
                                     onLoop: { manager.toggleLoop(line) },
                                     onWordTap: onWordTap,
                                     onToggleHidden: { toggleHidden(line) },
@@ -185,6 +186,7 @@ struct SentenceRowView: View {
     var hideMode: TextHideMode = .normal
     var isHidden: Bool = false
     let onTap: () -> Void
+    var onPlayOnce: () -> Void = {}
     let onLoop: () -> Void
     var onWordTap: (String) -> Void = { _ in }
     var onToggleHidden: () -> Void = {}
@@ -200,6 +202,9 @@ struct SentenceRowView: View {
                     .foregroundStyle(.tertiary)
                     .frame(width: 34, alignment: .trailing)
                     .padding(.top, 3)
+                    .contentShape(Rectangle())
+                    .onTapGesture { onTap() }
+                    .help("跳转到此时间连续播放")
             }
             if isHidden {
                 Text("⋯ 此句已隐藏（点击显示）")
@@ -220,7 +225,7 @@ struct SentenceRowView: View {
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
-                .onTapGesture { onTap() }
+                .onTapGesture { onPlayOnce() }
                 .contextMenu {
                     Button(isHidden ? "显示此句" : "隐藏此句（针对性训练）") { onToggleHidden() }
                     Button("复制句子") {
@@ -230,6 +235,15 @@ struct SentenceRowView: View {
             }
 
             if showTiming {
+                Button(action: onPlayOnce) {
+                    Image(systemName: "play.circle")
+                        .foregroundStyle(Color.secondary)
+                }
+                .buttonStyle(.plain)
+                .opacity(isHovered ? 1 : 0)
+                .help("只播放这一句（播完自动停）")
+                .padding(.top, 2)
+
                 Button(action: onShadow) {
                     Image(systemName: "mic")
                         .foregroundStyle(Color.secondary)

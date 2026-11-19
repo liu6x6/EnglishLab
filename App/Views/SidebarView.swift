@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 /// 左侧播放列表：素材/自建分组、搜索、导入、进度、继续播放
 struct SidebarView: View {
@@ -19,9 +20,14 @@ struct SidebarView: View {
     @State private var playlistRenameTarget: Playlist?
     @State private var playlistRenameText = ""
     #if os(iOS)
-    @State private var showMediaPicker = false
-    @State private var showSubtitlePicker = false
-    @State private var subtitleTarget: MediaItem?
+    /// 导入请求（媒体/字幕共用一个原生选择器，避免多 fileImporter 冲突）
+    struct ImportRequest: Identifiable {
+        let id = UUID()
+        let types: [UTType]
+        let multiple: Bool
+        let target: MediaItem?
+    }
+    @State private var importRequest: ImportRequest?
     #endif
 
     private var videos: [MediaItem] { items.filter { $0.type == .video } }
@@ -121,26 +127,30 @@ struct SidebarView: View {
             Text(errorMessage ?? "")
         }
         #if os(iOS)
-        .fileImporter(
-            isPresented: $showMediaPicker,
-            allowedContentTypes: MediaImporter.mediaTypes + MediaImporter.subtitleTypes,
-            allowsMultipleSelection: true
-        ) { result in
-            if case .success(let urls) = result {
-                let r = MediaImporter.importFiles(urls, context: context)
-                errorMessage = r.error
-                if selection == nil { selection = r.imported.first }
+        .onAppear {
+            // 测试钩子：验证导入选择器能弹出
+            if CommandLine.arguments.contains("--selftest-import-picker") {
+                importRequest = ImportRequest(
+                    types: MediaImporter.mediaTypes + MediaImporter.subtitleTypes,
+                    multiple: true,
+                    target: nil
+                )
             }
         }
-        .fileImporter(
-            isPresented: $showSubtitlePicker,
-            allowedContentTypes: MediaImporter.subtitleTypes,
-            allowsMultipleSelection: false
-        ) { result in
-            if case .success(let urls) = result, let url = urls.first, let target = subtitleTarget {
-                errorMessage = MediaImporter.attachSubtitle(url, to: target, context: context)
+        .sheet(item: $importRequest) { request in
+            DocumentPicker(types: request.types, multiple: request.multiple) { urls in
+                if let target = request.target, let url = urls.first {
+                    errorMessage = MediaImporter.attachSubtitle(url, to: target, context: context)
+                } else {
+                    let r = MediaImporter.importFiles(urls, context: context)
+                    errorMessage = r.error
+                    if selection == nil { selection = r.imported.first }
+                }
+                importRequest = nil
+            } onCancel: {
+                importRequest = nil
             }
-            subtitleTarget = nil
+            .ignoresSafeArea()
         }
         #endif
     }
@@ -292,7 +302,11 @@ struct SidebarView: View {
         errorMessage = result.error
         if selection == nil { selection = result.imported.first }
         #else
-        showMediaPicker = true
+        importRequest = ImportRequest(
+            types: MediaImporter.mediaTypes + MediaImporter.subtitleTypes,
+            multiple: true,
+            target: nil
+        )
         #endif
     }
 
@@ -305,8 +319,11 @@ struct SidebarView: View {
         ), let url = urls.first else { return }
         errorMessage = MediaImporter.attachSubtitle(url, to: item, context: context)
         #else
-        subtitleTarget = item
-        showSubtitlePicker = true
+        importRequest = ImportRequest(
+            types: MediaImporter.subtitleTypes,
+            multiple: false,
+            target: item
+        )
         #endif
     }
 

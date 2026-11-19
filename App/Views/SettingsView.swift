@@ -5,6 +5,7 @@ struct SettingsView: View {
     @AppStorage("appearance") private var appearance: String = "system"
     @AppStorage("transcriptFontSize") private var fontSize: Double = 15
     @AppStorage("defaultRate") private var defaultRate: Double = 1.0
+    @AppStorage("playerWidthFraction") private var playerWidthFraction: Double = 0.85
 
     var body: some View {
         TabView {
@@ -30,6 +31,17 @@ struct SettingsView: View {
                     }
                 }
                 Text("新加载素材时应用；播放中可随时用控制条或 [ ] 键调整")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                HStack {
+                    Text("视频画面宽度")
+                    Slider(value: $playerWidthFraction, in: 0.4...1.0, step: 0.05)
+                    Text("\(Int(playerWidthFraction * 100))%")
+                        .monospacedDigit()
+                        .frame(width: 44)
+                }
+                Text("视频居中显示；也可在播放控制条右侧快速切换")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

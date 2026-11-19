@@ -15,7 +15,8 @@ struct EnglishLabApp: App {
         UserDefaults.standard.register(defaults: [
             "defaultRate": 1.0,
             "transcriptFontSize": 15.0,
-            "appearance": "system"
+            "appearance": "system",
+            "playerWidthFraction": 0.85
         ])
     }
 

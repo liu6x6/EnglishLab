@@ -40,8 +40,10 @@ struct PlayerSurface: UIViewControllerRepresentable {
 /// 自定义播放控制条
 struct PlayerControlsView: View {
     @Bindable var manager: PlayerManager
+    var showSizeControl: Bool = false
     @State private var scrubbing = false
     @State private var scrubValue: Double = 0
+    @AppStorage("playerWidthFraction") private var playerWidthFraction: Double = 0.85
 
     private let rates: [Float] = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0]
 
@@ -79,6 +81,16 @@ struct PlayerControlsView: View {
                     .buttonStyle(.bordered)
                     .tint(.accentColor)
                     .help("点击取消循环：\(line.text)")
+                } else if manager.playingLine != nil {
+                    Button {
+                        manager.cancelLinePlay()
+                    } label: {
+                        Label("单句播放中", systemImage: "text.line.first.and.arrowtriangle.forward")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.accentColor)
+                    .help("点击取消单句播放，继续连续播放")
                 }
 
                 Spacer()
@@ -110,6 +122,24 @@ struct PlayerControlsView: View {
                 .pickerStyle(.menu)
                 .frame(width: 80)
                 .help("播放速度")
+
+                if showSizeControl {
+                    Menu {
+                        Picker("画面大小", selection: $playerWidthFraction) {
+                            Text("小（50%）").tag(0.5)
+                            Text("中（70%）").tag(0.7)
+                            Text("大（85%）").tag(0.85)
+                            Text("满宽（100%）").tag(1.0)
+                        }
+                        .pickerStyle(.inline)
+                        .labelsHidden()
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    }
+                    .adaptiveMenuStyle()
+                    .fixedSize()
+                    .help("视频画面大小")
+                }
 
                 Image(systemName: manager.volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
                     .foregroundStyle(.secondary)

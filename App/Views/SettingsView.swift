@@ -10,45 +10,49 @@ struct SettingsView: View {
     @State private var modelManager = WhisperModelManager.shared
 
     var body: some View {
-        TabView {
-            Form {
-                Picker("主题", selection: $appearance) {
-                    Text("跟随系统").tag("system")
-                    Text("浅色").tag("light")
-                    Text("深色").tag("dark")
-                }
-                .pickerStyle(.segmented)
+        #if os(iOS)
+        iosBody
+        #else
+        macBody
+        #endif
+    }
 
-                HStack {
-                    Text("字幕字号")
-                    Slider(value: $fontSize, in: 11...28, step: 1)
-                    Text("\(Int(fontSize)) pt")
-                        .monospacedDigit()
-                        .frame(width: 44)
-                }
+    // MARK: - iOS：顶部 segment（通用/转写）
 
-                Picker("默认播放速度", selection: $defaultRate) {
-                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { r in
-                        Text(String(format: "%.2gx", r)).tag(r)
-                    }
-                }
-                Text("新加载素材时应用；播放中可随时用控制条或 [ ] 键调整")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    #if os(iOS)
+    @State private var iosSection = 0
 
-                HStack {
-                    Text("视频画面宽度")
-                    Slider(value: $playerWidthFraction, in: 0.4...1.0, step: 0.05)
-                    Text("\(Int(playerWidthFraction * 100))%")
-                        .monospacedDigit()
-                        .frame(width: 44)
-                }
-                Text("视频居中显示；也可在播放控制条右侧快速切换")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+    private var iosBody: some View {
+        VStack(spacing: 0) {
+            Picker("设置分类", selection: $iosSection) {
+                Text("通用").tag(0)
+                Text("转写").tag(1)
             }
-            .padding(20)
-            .tabItem { Label("通用", systemImage: "gearshape") }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Group {
+                if iosSection == 0 {
+                    generalForm
+                } else {
+                    transcriptionTab
+                }
+            }
+        }
+        .navigationTitle("设置")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+    #endif
+
+    // MARK: - macOS：原有 TabView 四页
+
+    private var macBody: some View {
+        TabView {
+            generalForm
+                .padding(20)
+                .tabItem { Label("通用", systemImage: "gearshape") }
 
             Form {
                 shortcutRow("空格", "播放 / 暂停")
@@ -81,9 +85,47 @@ struct SettingsView: View {
         }
         #if os(macOS)
         .frame(width: 520, height: 460)
-        #else
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         #endif
+    }
+
+    /// 通用设置（双平台共用）
+    private var generalForm: some View {
+        Form {
+            Picker("主题", selection: $appearance) {
+                Text("跟随系统").tag("system")
+                Text("浅色").tag("light")
+                Text("深色").tag("dark")
+            }
+            .pickerStyle(.segmented)
+
+            HStack {
+                Text("字幕字号")
+                Slider(value: $fontSize, in: 11...28, step: 1)
+                Text("\(Int(fontSize)) pt")
+                    .monospacedDigit()
+                    .frame(width: 44)
+            }
+
+            Picker("默认播放速度", selection: $defaultRate) {
+                ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { r in
+                    Text(String(format: "%.2gx", r)).tag(r)
+                }
+            }
+            Text("新加载素材时应用；播放中可随时用控制条或 [ ] 键调整")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack {
+                Text("视频画面宽度")
+                Slider(value: $playerWidthFraction, in: 0.4...1.0, step: 0.05)
+                Text("\(Int(playerWidthFraction * 100))%")
+                    .monospacedDigit()
+                    .frame(width: 44)
+            }
+            Text("视频居中显示；也可在播放控制条右侧快速切换")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: - 转写引擎与模型

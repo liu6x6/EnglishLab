@@ -47,7 +47,8 @@ struct ContentView: View {
                 manager.load(newValue)
                 #if os(iOS)
                 if isCompact, newValue != nil,
-                   !CommandLine.arguments.contains("--selftest-import-picker") {
+                   !CommandLine.arguments.contains("--selftest-import-picker"),
+                   !CommandLine.arguments.contains("--selftest-tab") {
                     selectedTab = 1
                 }
                 #endif
@@ -61,6 +62,10 @@ struct ContentView: View {
                 #if os(iOS)
                 if CommandLine.arguments.contains("--selftest-wordbook") {
                     showWordbook = true
+                }
+                if let idx = CommandLine.arguments.firstIndex(of: "--selftest-tab"), idx + 1 < CommandLine.arguments.count,
+                   let tab = Int(CommandLine.arguments[idx + 1]) {
+                    selectedTab = tab
                 }
                 #endif
             }
@@ -264,7 +269,6 @@ struct ContentView: View {
             NavigationStack {
                 SidebarView(selection: $selectedMedia, onAISubtitle: requestAISubtitle)
                     .navigationTitle("素材")
-                    .toolbar { mainToolbar }
             }
             .tabItem { Label("素材", systemImage: "rectangle.stack") }
             .tag(0)
@@ -284,6 +288,16 @@ struct ContentView: View {
             }
             .tabItem { Label("单词", systemImage: "character.book.closed") }
             .tag(2)
+
+            LearningTabView()
+                .tabItem { Label("学习", systemImage: "graduationcap") }
+                .tag(3)
+
+            NavigationStack {
+                SettingsView()
+            }
+            .tabItem { Label("设置", systemImage: "gearshape") }
+            .tag(4)
         }
     }
     #endif

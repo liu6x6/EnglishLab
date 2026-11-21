@@ -3,3 +3,6 @@ build/
 .build/
 *.xcodeproj
 DerivedData/
+.cache/
+.DS_Store
+xcuserdata/

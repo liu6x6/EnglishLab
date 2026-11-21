@@ -14,6 +14,8 @@ packages:
     path: Packages/ShadowingKit
   ReviewKit:
     path: Packages/ReviewKit
+  WhisperCpp:
+    path: Packages/WhisperCpp
 targets:
   EnglishLab:
     type: application
@@ -25,6 +27,8 @@ targets:
       - package: SubtitleKit
       - package: ShadowingKit
       - package: ReviewKit
+      - package: WhisperCpp
+        product: WhisperCppKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.liuxiaolong.EnglishLab
@@ -52,6 +56,8 @@ targets:
       - package: SubtitleKit
       - package: ShadowingKit
       - package: ReviewKit
+      - package: WhisperCpp
+        product: WhisperCppKit
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.liuxiaolong.EnglishLab.iOS

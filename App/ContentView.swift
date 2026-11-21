@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var showShadowHistory = false
     @State private var showReview = false
     @State private var showStats = false
+    @State private var showSettings = false
     @State private var transcription = TranscriptionManager()
     @State private var aiOverwriteTarget: MediaItem?
     @State private var isDropTargeted = false
@@ -57,6 +58,11 @@ struct ContentView: View {
                 restoreLastSessionIfNeeded()
                 manager.load(selectedMedia)
                 autoImportForTestingIfNeeded()
+                #if os(iOS)
+                if CommandLine.arguments.contains("--selftest-wordbook") {
+                    showWordbook = true
+                }
+                #endif
             }
             .task {
                 let args = CommandLine.arguments
@@ -65,6 +71,10 @@ struct ContentView: View {
                 }
                 if let idx = args.firstIndex(of: "--selftest-audio"), idx + 1 < args.count {
                     await AudioSelfTest.run(urlString: args[idx + 1])
+                }
+                if let idx = args.firstIndex(of: "--selftest-whisper"), idx + 1 < args.count {
+                    let model = idx + 2 < args.count ? args[idx + 2] : nil
+                    await WhisperSelfTest.run(audioPath: args[idx + 1], modelName: model)
                 }
             }
             .onDisappear {
@@ -99,6 +109,11 @@ struct ContentView: View {
             .sheet(isPresented: $transcription.isPresented) {
                 TranscriptionSheet(manager: transcription)
             }
+            #if os(iOS)
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            #endif
             .alert("替换现有字幕？", isPresented: Binding(
                 get: { aiOverwriteTarget != nil },
                 set: { if !$0 { aiOverwriteTarget = nil } }
@@ -355,6 +370,15 @@ struct ContentView: View {
             }
             .help("查看学习时长、词汇增长等统计")
         }
+        #if os(iOS)
+        ToolbarItem {
+            Button {
+                showSettings = true
+            } label: {
+                Label("设置", systemImage: "gearshape")
+            }
+        }
+        #endif
     }
 
     // MARK: - Actions

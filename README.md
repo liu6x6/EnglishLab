@@ -20,7 +20,7 @@ Mac / iPhone / iPad 沉浸式英语学习 App（方向 A · Phase 1–4 全部�
 | **艾宾浩斯复习**（工具栏 🧠+到期徽章） | 到期词卡片流：先回忆→空格揭示答案→`1` 忘记 / `2` 记得；间隔 1/2/4/7/15/30 天递增，6 阶段全过=已掌握，忘记 10 分钟后重现 |
 | 学习统计（工具栏 📊） | 今日/累计学习时长、点词/跟读/复习次数、平均分；近 7 天学习时长柱状图 + 词汇量增长曲线（Swift Charts） |
 | 导出 | 生词本 → 导出菜单：CSV / **Anki TSV**（Anki「文件→导入」直接可用，含音标/释义/例句） |
-| **AI 生成字幕**（右键素材 / 文本区 ✨） | Apple SpeechTranscriber 设备端转写（macOS 26+/iOS 26+，免费离线、不上传音频），自动带时间轴；首次自动下载语言模型；老系统降级提示手动导入 |
+| **AI 生成字幕**（右键素材 / 文本区 ✨） | **双引擎**：Apple SpeechTranscriber（macOS 26+/iOS 26+，系统级极快）+ **whisper.cpp**（macOS 14+/iOS 17+，Metal/Accelerate 加速）；自动路由：<26 用 whisper，≥26 默认 Apple；设置→转写可手动切换引擎、下载/选择模型（tiny.en~medium.en/large-v3-turbo）；完全设备端、不上传音频 |
 | **iOS 后台播放** | 退后台/锁屏继续听；锁屏/控制中心显示进度；耳机线控播放/暂停/±10s/拖动 |
 | 设置（⌘,） | 主题（浅色/深色/系统）、字幕字号、默认倍速、快捷键说明、数据来源署名 |
 
@@ -53,7 +53,7 @@ xcodebuild -project EnglishLab.xcodeproj -scheme EnglishLab-iOS -configuration D
 | 布局 | 三栏同屏 | 横屏三栏 / 竖屏可折叠 | 底部 Tab（素材/播放/单词） |
 | 导入 | NSOpenPanel | fileImporter | fileImporter |
 | 导出 | NSSavePanel | 系统分享 | 系统分享 |
-| 设置 | ⌘, 独立窗口 | —（字号在文本区调节） | 同 iPad |
+| 设置 | ⌘, 独立窗口 | 素材页齿轮 → 设置面板 | 同 iPad |
 | AI 字幕 | macOS 26+ | iOS 26+ | iOS 26+（否则降级提示） |
 | 快捷键 | 全支持 | 外接键盘支持 | 外接键盘支持 |
 
@@ -79,7 +79,21 @@ swift test --package-path Packages/ReviewKit       # 艾宾浩斯调度 6 tests
 # 输出 SELFTEST DICT OK
 ./build/Build/Products/Debug/EnglishLab.app/Contents/MacOS/EnglishLab --selftest-audio "https://api.dictionaryapi.dev/media/pronunciations/en/hello-au.mp3"
 # 输出 SELFTEST AUDIO OK（首次下载→二次缓存命中）
+./build/Build/Products/Debug/EnglishLab.app/Contents/MacOS/EnglishLab --selftest-whisper "$PWD/Samples/learning_english.m4a" base.en
+# 输出 SELFTEST WHISPER OK: N segments（需已下载对应模型）
 ```
+
+### Whisper 模型与 xcframework
+
+- 模型按需下载（设置→转写）：hf-mirror 快速通道，存 `Application Support/EnglishLab/WhisperModels`
+- `whisper.xcframework` 已预构建（macOS arm64 / iOS 真机 arm64 / 模拟器 arm64+x86_64），重新构建：
+
+```bash
+python3 scripts/fetch_whisper_src.py        # GitHub API 清单 + jsDelivr 并发拉源码
+bash scripts/build_whisper_xcframework.sh   # cmake 静态构建 + xcframework
+```
+
+- 模拟器上 whisper 自动用 CPU（NEON）：模拟器 Metal 驱动大缓冲区有 XPC 限制；真机用 Metal GPU
 
 ### 离线词典数据
 
@@ -155,6 +169,7 @@ EnglishLab/
 
 - 词典：[dictionaryapi.dev](https://dictionaryapi.dev)（Wiktionary，CC BY-SA 3.0）
 - **离线英汉词典：[ECDICT](https://github.com/skywind3000/ecdict)（MIT License，内嵌精简版）**
+- **语音转写：Apple SpeechTranscriber（系统）+ [whisper.cpp](https://github.com/ggml-org/whisper.cpp)（MIT License），模型来自 [ggerganov/whisper.cpp](https://huggingface.co/ggerganov/whisper.cpp)**
 - 近反义词：[Datamuse API](https://www.datamuse.com/api/)
 - 发音：Wiktionary 音频，兜底 AVSpeechSynthesizer
 

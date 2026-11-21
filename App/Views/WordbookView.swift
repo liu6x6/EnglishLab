@@ -74,6 +74,42 @@ struct WordbookView: View {
             }
         }
         .sheetMinFrame(width: 760, height: 500)
+        #if os(iOS)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundStyle(.secondary)
+                    TextField("搜索单词…", text: $searchText)
+                        .textFieldStyle(.plain)
+                    if !searchText.isEmpty {
+                        Button {
+                            searchText = ""
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.gray.opacity(0.12)))
+
+                Picker("状态", selection: $statusFilter) {
+                    Text("全部").tag(LearningStatus?.none)
+                    ForEach(LearningStatus.allCases, id: \.self) { s in
+                        Text(s.displayName).tag(LearningStatus?.some(s))
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+            .padding(.bottom, 6)
+            .background(.bar)
+        }
+        #endif
         .sheet(isPresented: $showBatchAdd) {
             BatchAddView()
         }
@@ -97,6 +133,7 @@ struct WordbookView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            #if os(macOS)
             Picker("状态", selection: $statusFilter) {
                 Text("全部").tag(LearningStatus?.none)
                 ForEach(LearningStatus.allCases, id: \.self) { s in
@@ -110,6 +147,7 @@ struct WordbookView: View {
             TextField("搜索单词…", text: $searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 160)
+            #endif
 
             Spacer()
 

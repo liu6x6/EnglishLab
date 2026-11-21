@@ -15,6 +15,14 @@ struct TranscriptView: View {
     @AppStorage("transcriptFontSize") private var fontSize: Double = 15
 
     private var hideMode: TextHideMode { TextHideMode(rawValue: hideModeRaw) ?? .normal }
+
+    static var attachSubtitleHint: String {
+        #if os(iOS)
+        return "在素材列表中长按素材 → 关联字幕…\n支持 .srt / .lrc / .vtt / .txt"
+        #else
+        return "在左侧素材上右键 → 关联字幕…\n支持 .srt / .lrc / .vtt / .txt"
+        #endif
+    }
     private var hideModeBinding: Binding<TextHideMode> {
         Binding(get: { hideMode }, set: { hideModeRaw = $0.rawValue })
     }
@@ -99,7 +107,7 @@ struct TranscriptView: View {
                     ContentUnavailableView(
                         "未关联字幕",
                         systemImage: "text.alignleft",
-                        description: Text("在左侧素材上右键 → 关联字幕…\n支持 .srt / .lrc / .vtt / .txt")
+                        description: Text(Self.attachSubtitleHint)
                     )
                     if TranscriptionService.isSupported {
                         Button {
@@ -194,6 +202,15 @@ struct SentenceRowView: View {
 
     @State private var isHovered = false
 
+    /// iOS 无悬停，操作按钮常驻显示
+    private var actionsVisible: Bool {
+        #if os(iOS)
+        return true
+        #else
+        return isHovered
+        #endif
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             if showTiming {
@@ -240,7 +257,7 @@ struct SentenceRowView: View {
                         .foregroundStyle(Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .opacity(isHovered ? 1 : 0)
+                .opacity(actionsVisible ? 1 : 0)
                 .help("只播放这一句（播完自动停）")
                 .padding(.top, 2)
 
@@ -249,7 +266,7 @@ struct SentenceRowView: View {
                         .foregroundStyle(Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .opacity(isHovered ? 1 : 0)
+                .opacity(actionsVisible ? 1 : 0)
                 .help("跟读此句")
                 .padding(.top, 2)
 
@@ -258,7 +275,7 @@ struct SentenceRowView: View {
                         .foregroundStyle(isLooping ? Color.accentColor : Color.secondary)
                 }
                 .buttonStyle(.plain)
-                .opacity(isHovered || isLooping ? 1 : 0)
+                .opacity(actionsVisible || isLooping ? 1 : 0)
                 .help("单句循环播放")
                 .padding(.top, 2)
             }
